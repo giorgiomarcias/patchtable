@@ -23,7 +23,9 @@ using std::pop_heap;
 #define TABLE_EXTRA_VERBOSE           0        /* Even more verbosity (should be turned off for checked in code) */
 #define PM_VERBOSE                    0        /* Verbose in PatchMatch */
 
+#ifndef TABLE_OPENMP
 #define TABLE_OPENMP                  1        /* Use OpenMP (multithreading) */
+#endif
 
 #define TABLE_SSE                     1        /* Use streaming SIMD instructions (for x86 architecture), a slight optimization. */
 #define TABLE_INT                     0        /* Use integer mode for table (does not work) */
@@ -393,7 +395,7 @@ real patch_dist_approx(const Array<real> &b_wh0, const real *avec, const real *b
         __m128 delta##n = _mm_sub_ps(a##n, b##n); \
         delta##n = _mm_mul_ps(delta##n, delta##n); \
         delta = _mm_add_ps(delta, delta##n);
-        
+
 #define PATCH_DIST_APPROX_SUM_AND_RETURN() \
         float *deltaf = (float *) &delta; \
         return deltaf[0] + deltaf[1] + deltaf[2] + deltaf[3];
@@ -406,13 +408,13 @@ real patch_dist_approx(const Array<real> &b_wh0, const real *avec, const real *b
     } else if (TABLE_NCHANNELS == 12) {
         PATCH_DIST_APPROX_ADD_DELTA_BLOCK(1);
         PATCH_DIST_APPROX_ADD_DELTA_BLOCK(2);
-        
+
         PATCH_DIST_APPROX_SUM_AND_RETURN();
     } else if (TABLE_NCHANNELS == 16) {
         PATCH_DIST_APPROX_ADD_DELTA_BLOCK(1);
         PATCH_DIST_APPROX_ADD_DELTA_BLOCK(2);
         PATCH_DIST_APPROX_ADD_DELTA_BLOCK(3);
-        
+
         PATCH_DIST_APPROX_SUM_AND_RETURN();
     } else if (TABLE_NCHANNELS == 20) {
         PATCH_DIST_APPROX_ADD_DELTA_BLOCK(1);
@@ -451,7 +453,7 @@ real patch_dist_approx(const Array<real> &b_wh0, const real *avec, const real *b
             ybest = ysrc; \
         } \
     }
-    
+
 #if TABLE_DEBUG
 #define PATCHMATCH_CHECK_KNN(check_next) \
     for (int check_k = 0; check_k < knn; check_k++) { \
@@ -497,7 +499,7 @@ real patch_dist_approx(const Array<real> &b_wh0, const real *avec, const real *b
 #pragma pack(1)
 class NNFPointer { public:
     double x, y, dist;
-    
+
     INLINE bool operator < (const NNFPointer &b) const {
         return dist < b.dist;
     }
@@ -533,7 +535,7 @@ void patchmatch(PatchTableParams *p, const Array<real> &a, const Array<real> &b,
     int min_dist2 = p->pm_min_dist*p->pm_min_dist;
     int prev_capacity = knn*8;
     int enrich_capacity = knn*knn*8;
-    
+
     int aew_lo = (aew+astep-1)/astep;    // (aew_lo-1)*astep < aew
     int aeh_lo = (aeh+astep-1)/astep;
 
@@ -565,11 +567,11 @@ void patchmatch(PatchTableParams *p, const Array<real> &a, const Array<real> &b,
             int y_lo = y/astep;
             for (int x = 0; x < aew; x += astep) {
                 int x_lo = x/astep;
-                
+
                 if (allowed_patches_a && ((*allowed_patches_a)(y, x) != p->allowed_index)) { continue; }
-                
+
                 PATCH_DIST_CALC_AVEC(wh_a);
-                
+
                 if (!use_knn) {
                     int bx = rand()%bew;
                     int by = rand()%beh;
@@ -605,7 +607,7 @@ void patchmatch(PatchTableParams *p, const Array<real> &a, const Array<real> &b,
             }
         }
     }
-    
+
     for (int iter = 0; iter < p->pm_iters; iter++) {
 #if PM_VERBOSE
         printf("patchmatch iter %d/%d\n", iter, p->pm_iters); fflush(stdout);
@@ -637,16 +639,16 @@ void patchmatch(PatchTableParams *p, const Array<real> &a, const Array<real> &b,
                     int y = mirror ? (aeh - 1 - y0): y0;
                     if (y % astep != 0) { continue; }
                     int y_lo = y/astep;
-                    
+
                     for (int x0 = 0; x0 < aew; x0++) {
                         int x = mirror ? (aew - 1 - x0): x0;
                         if (x % astep != 0) { continue; }
                         int x_lo = x/astep;
-                        
+
                         if (allowed_patches_a && ((*allowed_patches_a)(y, x) != p->allowed_index)) { continue; }
-                        
+
                         PATCH_DIST_CALC_AVEC(wh_a);
-                        
+
                         if (!use_knn) {
                             int xbest = ann(y_lo, x_lo, NNF_X);
                             int ybest = ann(y_lo, x_lo, NNF_Y);
@@ -669,22 +671,22 @@ void patchmatch(PatchTableParams *p, const Array<real> &a, const Array<real> &b,
                                     REPLACE_IF_IMPROVED_MATCH();
                                 }
                             }
-                            
+
                             /* Random search */
                             for (int rs_mag = rs_max; rs_mag >= 1; rs_mag /= 2) {
                                 RS_SAMPLE_AROUND(xbest, ybest);
-                                
+
                                 if ((xsrc != xbest || ysrc != ybest) && (!allowed_patches_b || (*allowed_patches_b)(ysrc, xsrc) == p->allowed_index)) {
                                     REPLACE_IF_IMPROVED_MATCH();
                                 }
                             }
-                            
+
                             ann(y_lo, x_lo, NNF_X) = xbest;
                             ann(y_lo, x_lo, NNF_Y) = ybest;
                             ann(y_lo, x_lo, NNF_DIST) = dbest;
                         } else {
                             prev_positions.clear();
-                            
+
                             NNFPointer *ann_L = (NNFPointer *) &ann(y_lo, x_lo, 0, 0);
                             for (int k = 0; k < knn; k++) {
                                 int bx = ann_L[k].x;
@@ -693,7 +695,7 @@ void patchmatch(PatchTableParams *p, const Array<real> &a, const Array<real> &b,
                                 ASSERT(in_bounds(by, beh), "expected existing by in bounds");
                                 prev_positions.insert(XY_TO_INT(bx, by));
                             }
-                            
+
                             /* Propagate x */
                             if (in_bounds(x_lo-delta, aew_lo) && (!allowed_patches_a || (*allowed_patches_a)(y, x-delta) == p->allowed_index)) {
                                 for (int k = 0; k < knn; k++) {
@@ -773,19 +775,19 @@ void patchmatch(PatchTableParams *p, const Array<real> &a, const Array<real> &b,
 #define PATCH_INDEX(x, y) ((y)*(b0.width()-p->patch_w+1)+(x))
 #define PATCH_INDEX_TO_X(i) ((i)%(b0.width()-p->patch_w+1))
 #define PATCH_INDEX_TO_Y(i) ((i)/(b0.width()-p->patch_w+1))
-    
+
 #if TABLE_ENABLE_ANN
 template<class real, class itype, int ndims>
 shared_ptr<ANNkd_tree> build_ann_index_func(PatchTableParams *p, const Array<real> &wh0, const Array<itype> *allowed_patches, int step, vector<int> &ann_index_to_pos, ANNpointArray &ann_data_points) {
     int grid = step;
     int ntrain = DIV_ROUND_UP(gck_xmax(wh0)-gck_xmin(wh0), grid)*DIV_ROUND_UP(gck_ymax(wh0)-gck_ymin(wh0), grid);
-    int ann_ntrain = ntrain;
+//    int ann_ntrain = ntrain;
     if (p->verbose) {
         printf("ann allocating data, %dx%d\n", ntrain, ndims);
     }
     ann_data_points = annAllocPts(ntrain, ndims);
     ann_index_to_pos.resize(ntrain);
-    
+
     int train_index = 0;
     for (int y = gck_ymin(wh0); y < gck_ymax(wh0); y += grid) {
         for (int x = gck_xmin(wh0); x < gck_xmax(wh0); x += grid) {
@@ -804,59 +806,59 @@ shared_ptr<ANNkd_tree> build_ann_index_func(PatchTableParams *p, const Array<rea
     if (p->verbose) {
         printf("ann: creating tree\n");
     }
-    
+
     shared_ptr<ANNkd_tree> ann_index(make_shared<ANNkd_tree>(ann_data_points, ntrain, ndims));
-    
+
     if (p->verbose) {
         printf("ann: done building tree\n");
     }
     return ann_index;
 }
-    
+
 #endif
-    
+
 #if TABLE_ENABLE_FLANN
 typedef flann::Index<flann::L2<float> > FlannIndexType;
-    
+
 template<class real, class itype, int ndims>
 shared_ptr<FlannIndexType> build_flann_index_func(PatchTableParams *p, const Array<real> &wh0, const Array<itype> *allowed_patches, int step, vector<int> &ann_index_to_pos) {
     double T0_build_index = wall_time();
     int ntrain = (gck_xmax(wh0)-gck_xmin(wh0))*(gck_ymax(wh0)-gck_ymin(wh0));
-    
+
     if (p->verbose) {
         printf("build_flann_index: allocating train_data, %dx%d\n", ntrain, ndims);
     }
     float *train_data_ptr = new float[ntrain*ndims];
     ann_index_to_pos.resize(ntrain);
-    
+
     int train_index = 0;
     TABLE_FOR_ALLOWED_PATCHES_STEP(step);
-    
+
         for (int i = 0; i < ndims; i++) {
             //train_data[train_index][i] = wh0(y, x, i);
             train_data_ptr[train_index*ndims+i] = wh0(y, x, i);
         }
         ann_index_to_pos[train_index] = XY_TO_INT(x-gck_xmin(wh0), y-gck_ymin(wh0));
-        
+
         train_index++;
-    
+
     TABLE_END_FOR_ALLOWED_PATCHES();
-    
+
     ntrain = train_index;
     flann::Matrix<float> train_data(train_data_ptr, ntrain, ndims);
-    
+
     if (p->verbose) {
         printf("kdtree method: creating tree (ntrain=%d)\n", ntrain);
     }
     shared_ptr<FlannIndexType> flann_index(make_shared<FlannIndexType>(train_data, flann::KDTreeSingleIndexParams())); //, cv::cvflann::FLANN_DIST_L2);
     //            flann_index = make_shared<FlannIndexType>(train_data, flann::KDTreeIndexParams(p->flann_trees)); //, cv::cvflann::FLANN_DIST_L2);
     flann_index->buildIndex();
-    
+
     delete[] train_data_ptr;
     if (p->verbose) {
         printf("kdtree method: done building tree (%f secs)\n", wall_time()-T0_build_index);
     }
-    
+
     return flann_index;
 }
 
@@ -876,7 +878,7 @@ class TreeCANN { public:
 #else
     shared_ptr<FlannIndexType> index;
 #endif
-    
+
     TreeCANN(PatchTableParams *p_, const Array<real> &b_, const Array<real> &wh_b_, const Array<itype> *allowed_patches_b_=NULL, int knn_=1, int matches_per_knn_=4, int spatial_=1)
     :p(p_), b(b_), wh_b(wh_b_), allowed_patches_b(allowed_patches_b_), knn(knn_), matches_per_knn(matches_per_knn_), spatial(spatial_) {
         /* Build index */
@@ -886,7 +888,7 @@ class TreeCANN { public:
         index = build_flann_index_func<real, itype, ndims>(p, wh_b, allowed_patches_b, p->treecann_bgrid, ann_index_to_pos);
 #endif
     }
-    
+
     ~TreeCANN() {
 #if TABLE_TREECANN_ANN
         if (ann_data_points) {
@@ -899,7 +901,7 @@ class TreeCANN { public:
     void lookup(const Array<real> &a, const Array<real> &wh_a, Array<double> &ann, const Array<itype> *allowed_patches_a=NULL) {
         int agrid = p->treecann_agrid;
         int min_dist2 = p->pm_min_dist * p->pm_min_dist;
-        
+
         int aew = gck_ew(wh_a), aeh = gck_eh(wh_a);
         int bew = gck_ew(wh_b), beh = gck_eh(wh_b);
         if (!use_knn) {
@@ -907,11 +909,11 @@ class TreeCANN { public:
         } else {
             ann.resize(aeh, aew, knn, 3);
         }
-        
+
         for (int y = 0; y < aeh; y++) {
             for (int x = 0; x < aew; x++) {
                 if (allowed_patches_a && ((*allowed_patches_a)(y, x)) != p->allowed_index) { continue; }
-                
+
                 if (!use_knn) {
                     ann(y, x, NNF_X) = 0;
                     ann(y, x, NNF_Y) = 0;
@@ -927,7 +929,7 @@ class TreeCANN { public:
         }
 
         int kmatch = knn*matches_per_knn;
-        
+
 #if TABLE_TREECANN_ANN
         ANNcoord query_vector[ndims];
         vector<ANNidx> matched_indices(kmatch);
@@ -935,19 +937,19 @@ class TreeCANN { public:
 #else
         flann::SearchParams search_params(p->flann_checks);
         search_params.eps = p->treecann_eps;
-        
+
         vector<int> grid_index(ndims);
         vector<real> query_vector(ndims);
-        
+
         flann::Matrix<real> query_matrix(&query_vector[0], 1, query_vector.size());
         vector<vector<int> > matched_indices_mat;
         vector<vector<float> > matched_dists_mat;
-        
+
         matched_indices_mat.resize(1);
         matched_dists_mat.resize(1);
         matched_indices_mat[0].resize(kmatch);
         matched_dists_mat[0].resize(kmatch);
-        
+
         ASSERT(matched_indices_mat.size() == 1, "expected 1 length for matched_indices_mat");
         ASSERT(matched_indices_mat[0].size() == kmatch, "expected kmatch length for matched_indices_mat[0]");
         vector<int> &matched_indices(matched_indices_mat[0]);
@@ -958,9 +960,9 @@ class TreeCANN { public:
         const Array<real> &wh0(wh_b);
         const Array<real> &b0(b);
         PATCH_DIST_CALC_BVEC0(wh0);
-        
+
         unordered_set<int> prev_positions(knn*8);
-        
+
         for (int y = 0; y < aeh; y += agrid) {
             for (int x = 0; x < aew; x += agrid) {
                 if (allowed_patches_a && ((*allowed_patches_a)(y, x)) != p->allowed_index) { continue; }
@@ -987,10 +989,10 @@ class TreeCANN { public:
                     int xbest = ann(y, x, NNF_X);
                     int ybest = ann(y, x, NNF_Y);
                     double dbest = ann(y, x, NNF_DIST);
-                    
+
                     {
                         PATCH_DIST_CALC_AVEC_EXACT_OR_APPROX(wh_a, a, x, y, p->is_descriptor);
-                        
+
                         for (int k = 0; k < kmatch; k++) {
                             int v = matched_indices[k];
                             int xsrc = INT_TO_X(v);
@@ -1003,14 +1005,14 @@ class TreeCANN { public:
                             }
                         }
                     }
-                    
+
                     for (int prop_y = -agrid; prop_y <= agrid; prop_y++) {
                         for (int prop_x = -agrid; prop_x <= agrid; prop_x++) {
                             int a_y_p = y + prop_y;
                             int a_x_p = x + prop_x;
                             if (allowed_patches_a && ((*allowed_patches_a)(a_y_p, a_x_p)) != p->allowed_index) { continue; }
                             if (!in_bounds(a_x_p, aew) || !in_bounds(a_y_p, aeh)) { continue; }
-                            
+
                             PATCH_DIST_CALC_AVEC_EXACT_OR_APPROX(wh_a, a, a_x_p, a_y_p, p->is_descriptor);
                             for (int dy = -spatial; dy <= spatial; dy++) {
                                 for (int dx = -spatial; dx <= spatial; dx++) {
@@ -1021,13 +1023,13 @@ class TreeCANN { public:
                                     else if (xsrc >= bew) { xsrc = bew-1; }
                                     if (ysrc < 0) { ysrc = 0; }
                                     else if (ysrc >= beh) { ysrc = beh-1; }
-                                    
+
                                     if (dx == 0 && dy == 0 && prop_x == 0 && prop_y == 0) {
                                         dcurrent = dbest;
                                     } else {
                                         dcurrent = TABLE_LOOKUP_PATCH_DIST_IS_DESCRIPTOR(xsrc, ysrc, p->is_descriptor);
                                     }
-                                    
+
                                     if (dcurrent < ann(a_y_p, a_x_p, NNF_DIST)) {
                                         ann(a_y_p, a_x_p, NNF_DIST) = dcurrent;
                                         ann(a_y_p, a_x_p, NNF_X) = xsrc;
@@ -1048,7 +1050,7 @@ class TreeCANN { public:
                         matched_patch[k].x = xsrc;
                         matched_patch[k].y = ysrc;
                     }
-                    
+
                     std::nth_element(matched_patch.begin(), matched_patch.begin()+knn-1, matched_patch.end());
                     for (int prop_y = -agrid; prop_y <= agrid; prop_y++) {
                         for (int prop_x = -agrid; prop_x <= agrid; prop_x++) {
@@ -1067,35 +1069,35 @@ class TreeCANN { public:
                             for (int k = 0; k < knn; k++) {
                                 for (int dy = -spatial; dy <= spatial; dy++) {
                                     for (int dx = -spatial; dx <= spatial; dx++) {
-                                        double dcurrent = 0;
+//                                        double dcurrent = 0;
                                         int xsrc = int(matched_patch[k].x) + prop_x + dx;
                                         int ysrc = int(matched_patch[k].y) + prop_y + dy;
                                         if (xsrc < 0) { xsrc = 0; }
                                         else if (xsrc >= bew) { xsrc = bew-1; }
                                         if (ysrc < 0) { ysrc = 0; }
                                         else if (ysrc >= beh) { ysrc = beh-1; }
-                                        
+
                                         if (min_dist2 > 0) {
                                             int dx = xsrc - a_x_p;
                                             int dy = ysrc - a_y_p;
                                             int d = dx*dx+dy*dy;
                                             if (d < min_dist2) { continue; }
                                         }
-                                        
+
                                         int cur_position = XY_TO_INT(xsrc, ysrc);
                                         if (!prev_positions.count(cur_position)) {
                                             real dcurrent = TABLE_LOOKUP_PATCH_DIST_IS_DESCRIPTOR(xsrc, ysrc, p->is_descriptor);
                                             if (dcurrent < ann_L[0].dist) {
                                                 int ann0_x = ann_L[0].x, ann0_y = ann_L[0].y;
                                                 prev_positions.erase(XY_TO_INT(ann0_x, ann0_y));
-                                                prev_positions.insert(cur_position); 
-                                                pop_heap(&ann_L[0], &ann_L[knn]); 
-                                                ann_L[knn-1].x = xsrc; 
-                                                ann_L[knn-1].y = ysrc; 
-                                                ann_L[knn-1].dist = dcurrent; 
-                                                push_heap(&ann_L[0],&ann_L[knn]); 
-                                            } 
-                                        } 
+                                                prev_positions.insert(cur_position);
+                                                pop_heap(&ann_L[0], &ann_L[knn]);
+                                                ann_L[knn-1].x = xsrc;
+                                                ann_L[knn-1].y = ysrc;
+                                                ann_L[knn-1].dist = dcurrent;
+                                                push_heap(&ann_L[0],&ann_L[knn]);
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -1154,7 +1156,7 @@ class PatchPartition1D { public:
         ::save(f, nslices);
         ::save(f, "EndPatchPartition1D");
     }
-    
+
     PatchPartition1D(PatchTableParams *p_, FILE *f) {
         p = p_;
         load_id(f, "PatchPartition1D");
@@ -1168,17 +1170,17 @@ class PatchPartition1D { public:
         load(f, nslices);
         load_id(f, "EndPatchPartition1D");
     }
-    
+
     PatchPartition1D(PatchTableParams *p_, const Array<real> &wh0, int channel, int nslices_, vector<int> patches, bool randomize, const vector<real> &min_valL, const vector<real> &max_valL) {
         p = p_;
         nslices = nslices_;
-        
+
         ASSERT2(nslices >= 1, "expected nslices >= 1");
         sort(patches.begin(), patches.end(), PatchComparator<real>(wh0, channel));
         min_val = min_valL[channel]; //wh0(INT_TO_Y(patches[0]), INT_TO_X(patches[0]), channel);
         max_val = max_valL[channel]; //wh0(INT_TO_Y(patches[patches.size()-1]), INT_TO_X(patches[patches.size()-1]), channel);
         range = max_val - min_val;
-        
+
         centers.resize(nslices);
         lsizes.resize(nslices);
         rsizes.resize(nslices);
@@ -1197,9 +1199,9 @@ class PatchPartition1D { public:
                 real cell_max = wh0(INT_TO_Y(patches[idx2]), INT_TO_X(patches[idx2]), channel);
                 real cell_min = wh0(INT_TO_Y(patches[idx1]), INT_TO_X(patches[idx1]), channel);
                 centers[i] = (cell_min+cell_max)/2;
-                if (p->verbose && i == 0) { printf("centers[%d] = %f, idx1=%d, idx2=%d, cell_min=%f, cell_max=%f, patches.size()=%d\n", i, centers[i], idx1, idx2, cell_min, cell_max, patches.size()); }
+                if (p->verbose && i == 0) { printf("centers[%d] = %f, idx1=%d, idx2=%d, cell_min=%f, cell_max=%f, patches.size()=%luu\n", i, centers[i], idx1, idx2, cell_min, cell_max, patches.size()); }
             }
-            
+
             for (int i = 0; i < nslices; i++) {
                 real prev_center = (i-1 >= 0) ? centers[i-1]: min_val;
                 real next_center = (i+1 < (int) centers.size()) ? centers[i+1]: max_val;
@@ -1214,7 +1216,7 @@ class PatchPartition1D { public:
 #endif
             }
         }
-        
+
         to_bin.resize(PATCH_PARTITION_NMAP);
 #if TABLE_ALLOW_COMPARE
         to_bin_frac.resize(PATCH_PARTITION_NMAP);
@@ -1232,7 +1234,7 @@ class PatchPartition1D { public:
             if (next_center == 0) { next_center++; }
             if (nslices == 1) { next_center = prev_center = 0; }
             double mid = (centers[prev_center] + centers[next_center]) / 2.0;
-            
+
             //        mid01    mid12
             //          |        |
             //     c0       c1       c2
@@ -1267,7 +1269,7 @@ class PatchPartition1D { public:
             }
 #endif
         }
-        
+
 #if TABLE_VERBOSE
         printf("PatchPartition1D(channel=%d)\n", channel);
         printf("  min: %f, max: %f\n", double(min_val), double(max_val));
@@ -1284,7 +1286,7 @@ class PatchPartition1D { public:
         printf("\n");
 #endif
     }
-    
+
 #if TABLE_ALLOW_COMPARE
     INLINE double get_bin_frac(real v) {
         int idx = (v-min_val)*(PATCH_PARTITION_NMAP-1)/range;
@@ -1320,7 +1322,7 @@ class PatchPartition1D { public:
                 printf("get_bin ans != ans_brute\n"); exit(1);
             }
         }*/
-        
+
         return ans;
     }
 };
@@ -1330,7 +1332,7 @@ template<class real, class itype>
 class PatchPartition { public:
     vector<PatchPartition1D<real> *> L;
     PatchTableParams *p;
-    
+
     void save(FILE *f) {
         ::save(f, "PatchPartition");
         ::save(f, int(L.size()));
@@ -1339,7 +1341,7 @@ class PatchPartition { public:
         }
         ::save(f, "EndPatchPartition");
     }
-    
+
     PatchPartition(PatchTableParams *p_, FILE *f) {
         p = p_;
         load_id(f, "PatchPartition");
@@ -1359,7 +1361,7 @@ class PatchPartition { public:
         int w = (gck_xmax(wh0) - gck_xmin(wh0) + p->partition_step-1) / p->partition_step;
         patches.resize(w*h);
         int count = 0;
-        
+
         if (!allowed_patches) {
             for (int y = gck_ymin(wh0); y < gck_ymax(wh0); y += p->partition_step) {
                 for (int x = gck_xmin(wh0); x < gck_xmax(wh0); x += p->partition_step) {
@@ -1380,25 +1382,25 @@ class PatchPartition { public:
         } else {
             patches.resize(count);
         }
-        
+
         for (int i = 0; i < (int) nslices.size(); i++) {
             L.push_back(new PatchPartition1D<real>(p, wh0, i, nslices[i], patches, randomize, min_valL, max_valL));
         }
     }
-    
+
     ~PatchPartition() {
         for (int i = 0; i < (int) L.size(); i++) {
             delete L[i];
         }
     }
-    
+
     void get_patch_index(const Array<real> &wh, int x, int y, vector<int> &patch_index) {
         ASSERT(patch_index.size() == L.size(), "expected patch_index of same size as L");
         for (int i = 0; i < GRID_NCHANNELS; i++) {
             patch_index[i] = L[i]->get_bin(wh(y, x, i));
         }
     }
-    
+
     template<int use_dmax>
     float patch_dist_to_grid(const Array<real> &wh, int x, int y, const vector<int> &grid_index, float dmax=0, bool verbose=false) {
         /* TODO: Could also add a penalty that sums over all WH dimensions (including those not added to the table), patch distance from their mean */
@@ -1431,7 +1433,7 @@ class AdjacencySet { public:
     bool unique;
     vector<unordered_set<int> *> sets;
     vector<vector<int> *> setsL;
-    
+
     AdjacencySet(int n, bool unique_);
     ~AdjacencySet();
     void add(int i, int j);
@@ -1474,7 +1476,7 @@ class PropElementProductQuantize { public:
     float path_length;
     PropElementProductQuantize() { }
     PropElementProductQuantize(itype grid_index_, itype table_value_, float path_length_) :grid_index(grid_index_), table_value(table_value_), path_length(path_length_) { }
-    
+
     INLINE bool operator < (const PropElementProductQuantize &b) const {
         return path_length > b.path_length;         /* Use > comparison to create a min heap */
     }
@@ -1483,7 +1485,7 @@ class PropElementProductQuantize { public:
 /* ------------------------------------------------------------------------------------------------
    PatchTable class with compile-time dimension count
    ------------------------------------------------------------------------------------------------ */
-    
+
 template<class real, class in_type, int ndims, class itype=TABLE_DEFAULT_ITYPE>
 class PatchTableFixedN {
   private:
@@ -1491,11 +1493,11 @@ class PatchTableFixedN {
     vector<shared_ptr<PatchTableFixedN<real, in_type, ndims, itype> > > tables;     /* List of (ntables-1) other tables */
     vector<shared_ptr<PatchTableParams> > tables_params;
 #endif
-    
+
 #if TABLE_PRODUCT_QUANTIZE
     shared_ptr<ProductQuantizer<real, itype> > product_quantizer;
 #endif
-    
+
 #if TABLE_CLUSTER_KMEANS
     vector<shared_ptr<PatchTableFixedN<real, in_type, ndims, itype> > > sub_tables;  /* Sub-tables, one for each k-means cluster */
     Array<itype> sub_allowed_patches;
@@ -1517,7 +1519,7 @@ class PatchTableFixedN {
     typedef int kcoherence_type;
 #define TABLE_KCOHERENCE_POS(v) (v)
 #endif
-    
+
     Array<kcoherence_type> kcoherence_set;
     shared_ptr<cv::PCA> pca;
 #if TABLE_ENABLE_ANN
@@ -1534,12 +1536,12 @@ class PatchTableFixedN {
 #if (TABLE_ENABLE_ANN || TABLE_ENABLE_FLANN)
     vector<int> ann_index_to_pos;
 #endif
-    
+
 #if (TABLE_OPTIMIZE_DT && !TABLE_DT_REGULAR)
     Array<dist_t> table_dist;                               /* Only used internally by constructor */
 #endif
     int table_add_count;
-    
+
   public:
     Array<itype> table;
 
@@ -1580,7 +1582,7 @@ class PatchTableFixedN {
         part->save(f);
         ::save(f, "EndPatchTable");
     }
-    
+
     void load(PatchTableParams *p_, FILE *f) {
         p = p_;
         ::load_id(f, "PatchTable");
@@ -1601,7 +1603,7 @@ class PatchTableFixedN {
             printf("PatchTable saved to %s in %f secs\n", filename.c_str(), wall_time()-T0);
         }
     }
-    
+
     void load(PatchTableParams *p_, string filename) {
         p = p_;
         double T0 = wall_time();
@@ -1613,7 +1615,7 @@ class PatchTableFixedN {
             printf("PatchTable loaded from %s in %f secs\n", filename.c_str(), wall_time()-T0);
         }
     }
-    
+
     PatchTableFixedN(PatchTableParams *p_, string filename) {
 #if TABLE_ENABLE_ANN
         ann_data_points = NULL;
@@ -1651,7 +1653,7 @@ class PatchTableFixedN {
             int x_orig = INT_TO_X(v);
             int y_orig = INT_TO_Y(v);
             if (x == x_orig && y == y_orig) { return; }
-            
+
 #if (!TABLE_OPTIMIZE_DT || TABLE_OPTIMIZE_REGULAR || TABLE_DT_REGULAR)
             float d_orig = part->template patch_dist_to_grid<0>(wh0, x_orig, y_orig, grid_index);
 #else
@@ -1683,10 +1685,10 @@ class PatchTableFixedN {
 #endif
         }
     }
-    
+
     void reduce_dim(const Array<in_type> &a, Array<real> &wh) {
         bool do_filter = p->filter_dims.size();
-        
+
         int ndims0 = p->ndims;
         if (do_filter) {
             if (p->filter_dims.size() != p->ndims) {
@@ -1701,9 +1703,9 @@ class PatchTableFixedN {
                 else if (p->ndims > 12) { p->ndims = 20; }
             }
         }
-        
+
         Array<real> wh_temp;
-        
+
         if (p->dim_algo == TABLE_DIM_ALGO_WH) {
             gck<in_type, real>(a, do_filter ? wh_temp: wh, p->ndims-p->nchroma*2, p->nchroma, p->patch_w);
         } else if (p->dim_algo == TABLE_DIM_ALGO_PCA) {
@@ -1712,7 +1714,7 @@ class PatchTableFixedN {
             }
             apply_patch_pca<in_type>(p, a, pca, do_filter ? wh_temp: wh);
         }
-        
+
         if (do_filter) {
             wh.resize(wh_temp.height(), wh_temp.width(), ndims0);
             for (int y = gck_ymin(wh); y < gck_ymax(wh); y++) {
@@ -1722,11 +1724,11 @@ class PatchTableFixedN {
                     }
                 }
             }
-            
+
             p->ndims = ndims0;
         }
     }
-    
+
     void count_table(string info="table count after populate") {
 #if (TABLE_DEBUG && 0)
         if (p->verbose) {
@@ -1754,7 +1756,7 @@ class PatchTableFixedN {
         }
 #endif
     }
-    
+
     void set_min_max(const Array<real> &choose_wh0) {
         min_val.resize(GRID_NCHANNELS);
         max_val.resize(GRID_NCHANNELS);
@@ -1762,7 +1764,7 @@ class PatchTableFixedN {
             min_val[i] = 1e20;
             max_val[i] = -1e20; //max_val[i] = wh0(0, 0, i);
         }
-        
+
         TABLE_FOR_ALLOWED_PATCHES_OPTIONAL_CLUSTER()
             for (int i = 0; i < GRID_NCHANNELS; i++) {
                 real current_val = choose_wh0(y, x, i);
@@ -1770,13 +1772,13 @@ class PatchTableFixedN {
                 max_val[i] = MAX(max_val[i], current_val);
             }
         TABLE_END_FOR_ALLOWED_PATCHES()
-        
+
         range.resize(GRID_NCHANNELS);
         for (int i = 0; i < GRID_NCHANNELS; i++) {
             range[i] = max_val[i]-min_val[i];
         }
     }
-    
+
     void set_default_nslices(const Array<real> &choose_wh0) {
         nslices.resize(GRID_NCHANNELS);
 
@@ -1802,13 +1804,13 @@ class PatchTableFixedN {
         }
 #endif
         real max_range = max(sizeL);
-        
+
         double scale = 200.0/max_range;
         for (int i = 0; i < GRID_NCHANNELS; i++) {
             nslices[i] = int(sizeL[i]*scale);
         }
     }
-    
+
     void check_table(const Array<itype> &t, bool allow_unused=false) {
         for (int j = 0; j < t.nelems; j++) {
             int v0 = t.data[j];
@@ -1844,7 +1846,7 @@ class PatchTableFixedN {
                 vector<int> *current_set = table_sets->get_set(current);
                 if (current_set) {
                     int i = rand()%int(current_set->size()+1);
-                    
+
                     if (i != 0) {
                         i--;
                         current = (*current_set)[i];
@@ -1857,18 +1859,18 @@ class PatchTableFixedN {
             }
             delete table_sets;
             table_sets = NULL;
-            
+
             double T_end_randomize = wall_time();
             if (p->verbose) {
                 printf("table randomize time: %f secs\n", T_end_randomize-T_start_randomize);
             }
-            
+
             count_table("table count after randomize");
         }
     }
-    
+
     void do_dt_raster() {
-    
+
         /* Distance transform to fill missing values in table */
 #if TABLE_VERBOSE
         printf("PatchTableFixedN distance transform\n"); fflush(stdout);
@@ -1887,7 +1889,7 @@ class PatchTableFixedN {
             if (jstep < 0) {
                 jstart = table.nelems-1; jend = -1;
             }
-            
+
 #if TABLE_OPENMP
             #pragma omp parallel
 #endif
@@ -1909,7 +1911,7 @@ class PatchTableFixedN {
                     for (int j0 = 0; j0 < table.nelems/table.sizes[0]; j0++) {
                         int j0_full = j0_dim0 * (table.nelems/table.sizes[0]) + j0;
                         int j = jstart + j0_full*jstep;
-                        
+
                         itype v0 = table.data[j];
                         int xbest = INT_TO_X(v0);
                         int ybest = INT_TO_Y(v0);
@@ -1990,7 +1992,7 @@ class PatchTableFixedN {
                                     }
                                 }
                             }
-                        
+
                         } else if (p->dt_mode == DT_MODE_EXPTIME) {
                             /* Check previous entry along every dimension simultaneously (Euclidean distance transform stencil) */
                             for (int k = 0; k < (1<<GRID_NCHANNELS); k++) {
@@ -1999,7 +2001,7 @@ class PatchTableFixedN {
                                     src_index[i] = grid_index[i] - (((k>>i)&1) ? jstep: 0);
                                     if (!in_bounds(src_index[i], nslices[i])) { ok = false; break; }
                                 }
-                                
+
                                 if (ok) {
                                     TABLE_TRY_DT();
                                 }
@@ -2051,7 +2053,7 @@ class PatchTableFixedN {
 #if (TABLE_OPTIMIZE_DT && !TABLE_DT_REGULAR)
         table_dist.resize(1);
 #endif
-        
+
         double T_end_dt = wall_time();
         if (p->verbose) {
             printf("table dt time (raster): %f secs\n", T_end_dt-T_begin_dt);
@@ -2080,7 +2082,7 @@ class PatchTableFixedN {
 
     void do_dt_prop() {
         double T_begin_dt = wall_time();
-        
+
         int nmax = MAX(table.nelems - table_add_count, table_add_count);
         vector<PropElement<itype> > prop_list0(nmax);
         vector<PropElement<itype> > prop_list1(table.nelems - table_add_count);
@@ -2095,17 +2097,17 @@ class PatchTableFixedN {
             fprintf(stderr, "current_count=%d, table_add_count=%d, table.nelems=%d\n", current_count, table_add_count, table.nelems);
             ASSERT2(current_count == table_add_count, "expected current_count == table_add_count");
         }
-        
+
         int nlabels = 1+GRID_NCHANNELS*2;
         vector<vector<PropEdge> > next_label;
-        
+
         vector<PropEdge> next0;
         for (int i = 0; i < GRID_NCHANNELS; i++) {
             next0.push_back(PropEdge(i, -1, nlabels));
             next0.push_back(PropEdge(i,  1, nlabels));
         }
         next_label.push_back(next0);
-        
+
         for (int i = 0; i < GRID_NCHANNELS; i++) {
             for (int dir = -1; dir <= 1; dir += 2) {
                 vector<PropEdge> next;
@@ -2119,7 +2121,7 @@ class PatchTableFixedN {
         }
         ASSERT2(next_label.size() == nlabels, "expected next_label size to match nlabels");
         int prop_list_current_count = table_add_count;
-        
+
         for (int iter = 0;; iter++) {
             if (p->dt_iters > 0 && iter > p->dt_iters) { break; }
 
@@ -2130,7 +2132,7 @@ class PatchTableFixedN {
             int prop_list_next_count = 0;
             //prop_list_next->clear();
             //printf("iter=%d, prop_list_current size=%d, nmax=%d, table_add_count=%d, prop_list1 size=%d\n", iter, prop_list_current_count, nmax, table_add_count, table.nelems - table_add_count);
-            
+
             for (int i = 0; i < prop_list_current_count; i++) {
                 PropElement<itype> elem((*prop_list_current)[i]);
                 int e_grid_index = elem.grid_index;
@@ -2138,7 +2140,7 @@ class PatchTableFixedN {
                 int e_idx = elem.label;
                 ASSERT((unsigned) e_idx < (unsigned) next_label.size(), "expected e_idx in bounds");
                 vector<PropEdge> *e_list = &next_label[e_idx];
-                
+
                 for (int j = 0; j < (int) e_list->size(); j++) {
                     PropEdge e = (*e_list)[j];
 
@@ -2154,10 +2156,10 @@ class PatchTableFixedN {
                     }
                 }
             }
-            
+
             prop_list_current_count = prop_list_next_count;
         }
-        
+
         double T_end_dt = wall_time();
         if (p->verbose) {
             printf("table dt time (prop): %f secs\n", T_end_dt-T_begin_dt);
@@ -2171,10 +2173,10 @@ class PatchTableFixedN {
         if (p->product_quantize_dt_all) {
             table_add_count = (gck_xmax(wh0)-gck_xmin(wh0))*(gck_ymax(wh0)-gck_ymin(wh0));
         }
-        
+
         Array<real> patch_arr(table_add_count, TABLE_NCHANNELS);
         vector<itype> patch_arr_index(table_add_count);
-        
+
         int current_count = 0;
         if (p->product_quantize_dt_all) {
             for (int y = gck_ymin(wh0); y < gck_ymax(wh0); y++) {
@@ -2185,7 +2187,7 @@ class PatchTableFixedN {
                         patch_row[k] = wh0_row[k];
                     }
                     patch_arr_index[current_count] = XY_TO_INT(x, y);
-                    
+
                     current_count++;
                 }
             }
@@ -2201,7 +2203,7 @@ class PatchTableFixedN {
                         patch_row[k] = wh0_row[k];
                     }
                     patch_arr_index[current_count] = v;
-                    
+
                     current_count++;
                 }
             }
@@ -2210,14 +2212,14 @@ class PatchTableFixedN {
             fprintf(stderr, "current_count=%d, table_add_count=%d, table.nelems=%d\n", current_count, table_add_count, table.nelems);
             ASSERT2(current_count == table_add_count, "expected current_count == table_add_count");
         }
-        
+
         flann::Matrix<real> flann_patch_arr(patch_arr.data, patch_arr.height(), patch_arr.width());
 //        flann::Index<flann::L2<real> > flann_patch_index(flann_patch_arr, flann::LinearIndexParams());
         flann::Index<flann::L2<real> > flann_patch_index(flann_patch_arr, flann::KDTreeSingleIndexParams());
         flann_patch_index.buildIndex();
-        
+
         vector<real> query_vector(TABLE_NCHANNELS);
-        
+
         vector<vector<int> > matched_indices_mat;
         vector<vector<real> > matched_dists_mat;
         flann::Matrix<real> query_matrix(&query_vector[0], 1, query_vector.size());
@@ -2229,7 +2231,7 @@ class PatchTableFixedN {
         search_params.eps = 0.0;
 
         double T_begin_search = wall_time();
-        
+
         for (int j = 0; j < table.nelems; j++) {
             itype v = table.data[j];
             if (v == TABLE_UNUSED) {
@@ -2244,7 +2246,7 @@ class PatchTableFixedN {
 
         /*
         vector<PropElementProductQuantize> q(table_add_count);
-        
+
         int current_count = 0;
 #if TABLE_PRODUCT_QUANTIZE_ACTUAL_DIST
         vector<int> quantized_index(product_quantizer->product_count);
@@ -2268,7 +2270,7 @@ class PatchTableFixedN {
                         int icluster = quantized_index[dim];
                         ASSERT2(in_bounds(icluster, cluster_centers.height()), "expected icluster in bounds");
                         ASSERT2(in_bounds(j, cluster_centers.width()), "expected j in bounds");
-                        
+
                         real coord2 = cluster_centers(icluster, j);
                         real coord1 = wh0(v_y, v_x, dim);
                         float delta = coord1-coord2;
@@ -2293,7 +2295,7 @@ class PatchTableFixedN {
             q.pop_back();
             ...
         }
-        
+
         */
         double T_end_dt = wall_time();
         if (p->verbose) {
@@ -2305,7 +2307,7 @@ class PatchTableFixedN {
 
     void do_dt_prop1() {
         double T_begin_dt = wall_time();
-        
+
         for (int j = 0; j < table.nelems; j++) {
             itype v = table.data[j];
             if (v != TABLE_UNUSED && !(v & TABLE_HI_MASK)) {
@@ -2322,13 +2324,13 @@ class PatchTableFixedN {
                 }
             }
         }
-        
+
         double T_end_dt = wall_time();
         if (p->verbose) {
             printf("table dt time (prop1): %f secs\n", T_end_dt-T_begin_dt);
         }
     }
-    
+
     void unmask_table() {
         for (int j = 0; j < table.nelems; j++) {
             table.data[j] = table.data[j] & TABLE_LO_MASK;
@@ -2338,22 +2340,22 @@ class PatchTableFixedN {
 #if TABLE_DT_DOWNSAMPLE
     void do_dt_downsample() {
         double T_begin_dt = wall_time();
-        
+
         vector<Array<itype> *> pyr;
         pyr.push_back(&table);
-        
+
         vector<int> unitary(GRID_NCHANNELS, 1);
-        
+
         while (pyr[pyr.size()-1]->sizes != unitary) {
             pyr.push_back(new Array<itype>());
             dt_downsample(*pyr[pyr.size()-2], *pyr[pyr.size()-1]);
         }
-        
+
         for (int i = pyr.size()-1; i >= 1; i--) {
             dt_upsample(*pyr[i], *pyr[i-1]);
             delete pyr[i];
         }
-        
+
         double T_end_dt = wall_time();
         if (p->verbose) {
             printf("table dt time (downsample): %f secs\n", T_end_dt-T_begin_dt);
@@ -2376,7 +2378,7 @@ class PatchTableFixedN {
         for (int j = 0; j < table.nelems; j++) {
             int xbest = gck_xmin(wh0);
             int ybest = gck_ymin(wh0);
-            
+
             for (int i = 0; i < GRID_NCHANNELS; i++) {
                 grid_index[i] = (j/table.stride[i]) % table.sizes[i];
             }
@@ -2405,7 +2407,7 @@ class PatchTableFixedN {
 #if (TABLE_OPTIMIZE_DT && !TABLE_DT_REGULAR)
         table_dist.resize(1);
 #endif
-        
+
         double T_end_dt = wall_time();
         if (p->verbose) {
             printf("table dt time (brute): %f secs\n", T_end_dt-T_begin_dt);
@@ -2430,7 +2432,7 @@ class PatchTableFixedN {
             matched_dists[i] = matched_dists_mat[0][i];
         }
     }
-    
+
 #if TABLE_ENABLE_FLANN
     void do_dt_kdtree() {
         double T_begin_dt = wall_time();
@@ -2439,7 +2441,7 @@ class PatchTableFixedN {
 #endif
 
         build_flann_index();
-        
+
         vector<int> grid_index(TABLE_NCHANNELS);
         vector<real> query_vector(TABLE_NCHANNELS);
         vector<int> matched_indices(p->dt_knn);
@@ -2457,7 +2459,7 @@ class PatchTableFixedN {
                 grid_index[i] = (j/table.stride[i]) % table.sizes[i];
                 query_vector[i] = part->L[i]->centers[grid_index[i]];
             }
-            
+
             flann_knn_search(query_vector, matched_indices, matched_dists, p->dt_knn, search_params);
             int matched_index = matched_indices[rand()%p->dt_knn];
             int bx = matched_index%bew;
@@ -2478,7 +2480,7 @@ class PatchTableFixedN {
 #if (TABLE_OPTIMIZE_DT && !TABLE_DT_REGULAR)
         table_dist.resize(1);
 #endif
-        
+
         double T_end_dt = wall_time();
         if (p->verbose) {
             printf("table dt time (kdtree): %f secs\n", T_end_dt-T_begin_dt);
@@ -2494,7 +2496,7 @@ class PatchTableFixedN {
         int lpad = rpad-1;
         int pad = lpad+rpad;
         int channels = 3;
-        
+
         if (p->is_descriptor) {
             if (p->descriptor_padded) {
                 a_wh.assign(a0);
@@ -2523,8 +2525,8 @@ class PatchTableFixedN {
             } else {
                 a_image.assign(a0);
             }
-            const Array<in_type> &a(p->convert_colorspace ? a_image: a0);
-            
+//            const Array<in_type> &a(p->convert_colorspace ? a_image: a0);
+
             double T0_gck = wall_time();
             reduce_dim(a_image, a_wh);
             double T1_gck = wall_time();
@@ -2544,7 +2546,7 @@ class PatchTableFixedN {
         }
 #endif
     }
-    
+
 #if TABLE_ENABLE_ANN
     void build_ann_index() {
         if (!ann_index) {
@@ -2563,7 +2565,7 @@ class PatchTableFixedN {
 #endif
 
     }
-    
+
     void set_nslices(const Array<real> &cluster_wh0) {
         double T0_slices = wall_time();
         set_min_max(cluster_wh0);
@@ -2592,9 +2594,9 @@ class PatchTableFixedN {
             load(p_, p_->load_filename);
             return;
         }
-        
+
         bool dealloc = (b0_no_copy == NULL);
-        
+
         double T0_construct_table = wall_time();
 
         table_add_count = 0;
@@ -2606,7 +2608,7 @@ class PatchTableFixedN {
             p->partition_step = 10000;
             p->kcoherence = 0;
         }
-        
+
 #if TABLE_VERBOSE
         printf("copying allowed_patches\n"); fflush(stdout);
 #endif
@@ -2616,7 +2618,7 @@ class PatchTableFixedN {
             printf("after assign allowed_patches\n");
         }
         part = NULL;
-        
+
 #if TABLE_VERBOSE
         printf("converting colorspace\n"); fflush(stdout);
 #endif
@@ -2635,7 +2637,7 @@ class PatchTableFixedN {
             wh0.assign(*wh0_no_copy, false);
             printf("after assign wh0\n");
         }
-        
+
         int bnn_height = TABLE_IMG_HEIGHT(wh0) - p->patch_w + 1;
         int bnn_width = TABLE_IMG_WIDTH(wh0) - p->patch_w + 1;
         if (allowed_patches) {
@@ -2670,12 +2672,12 @@ class PatchTableFixedN {
                 }
 #endif
                 int knn0 = p->kcoherence+1;
-                
+
                 vector<real> query_vector(TABLE_NCHANNELS);
                 vector<bool> is_valid(knn0);
                 vector<int> matched_indices(knn0);
                 vector<float> matched_dists(knn0);
-                
+
 #if TABLE_ENABLE_ANN
                 ANNcoord ann_query[ndims];
                 vector<ANNidx> ann_idx(knn0);
@@ -2688,7 +2690,7 @@ class PatchTableFixedN {
                 flann::SearchParams search_params(p->flann_checks);
                 search_params.eps = p->flann_eps;
 #endif
-                
+
                 int prev_knn = knn0;
                 int min_dist2 = (p->kcoherence_min_dist*p->kcoherence_min_dist);
 
@@ -2696,7 +2698,7 @@ class PatchTableFixedN {
                 PATCH_DIST_CALC_BVEC0(wh0);
                 vector<pair<float, pair<int, int> > > matched_triples;
 #endif
-                
+
 #if TABLE_SAVE_KCOHERENCE
                 Array<float> array_kcoherence_x, array_kcoherence_y, array_kcoherence_d;
                 if (p->save_kcoherence) {
@@ -2705,7 +2707,7 @@ class PatchTableFixedN {
                     array_kcoherence_d.resize(kcoherence_set.height(), kcoherence_set.width(), p->kcoherence);
                 }
 #endif
-                
+
                 TABLE_FOR_ALLOWED_PATCHES_STEP(p->kcoherence_step)
                     int y_kcoherence = (y-gck_ymin(wh0))/p->kcoherence_step;
                     int x_kcoherence = (x-gck_xmin(wh0))/p->kcoherence_step;
@@ -2713,14 +2715,14 @@ class PatchTableFixedN {
                     for (int i = 0; i < TABLE_NCHANNELS; i++) {
                         query_vector[i] = wh0(y, x, i);
                     }
-                
+
                     int knn = (x/p->kcoherence_step) % p->flann_reset_step == 0 ? knn0: prev_knn;
-                
+
                     while (1) {
                         is_valid.resize(knn);
                         matched_indices.resize(knn);
                         matched_dists.resize(knn);
-                        
+
 //                        printf("kd-tree query %d, knn=%d, kcoherence=%d at %d, %d\n", int(query_vector.size()), knn, p->kcoherence, x, y);
                         bool search_ok = false;
 #if TABLE_ENABLE_FLANN
@@ -2745,7 +2747,7 @@ class PatchTableFixedN {
                             ann_index->annkSearch(ann_query, knn, &ann_idx[0], &ann_dist[0], p->ann_eps);
                             for (int i = 0; i < knn; i++) {
                                 if (!in_bounds(ann_idx[i], ann_index_to_pos.size())) {
-                                    fprintf(stderr, "ann_idx[%d] = %d, out of bounds %d\n", i, ann_idx[i], ann_index_to_pos.size()); ASSERT2(false, "out of bounds");
+                                    fprintf(stderr, "ann_idx[%d] = %d, out of bounds %lu\n", i, ann_idx[i], ann_index_to_pos.size()); ASSERT2(false, "out of bounds");
                                 }
                                 matched_indices[i] = ann_index_to_pos[ann_idx[i]];
                             }
@@ -2753,7 +2755,7 @@ class PatchTableFixedN {
                         }
 #endif
                         ASSERT2(search_ok, "ann/flann search failed. Enable TABLE_ENABLE_FLANN or TABLE_ENABLE_ANN");
-                        
+
                         int nvalid = 0;
                         for (int i = 0; i < knn; i++) {
                             int matched_index = matched_indices[i];
@@ -2765,7 +2767,7 @@ class PatchTableFixedN {
                             int dy = by+gck_ymin(wh0) - y;
                             int d = dx*dx+dy*dy;
                             is_valid[i] = d >= min_dist2;
-                            
+
                             if (p->incoherence) {
                                 int dx_L[] = { -1,  0,  0 };
                                 int dy_L[] = {  0, -1,  0 };
@@ -2789,7 +2791,7 @@ class PatchTableFixedN {
                                             }
                                             bx_p -= dx_L[j_delta] * p->kcoherence_step;
                                             by_p -= dy_L[j_delta] * p->kcoherence_step;
-                                            
+
                                             int dx_p = bx - bx_p;
                                             int dy_p = by - by_p;
                                             int d_p = dx_p*dx_p + dy_p*dy_p;
@@ -2802,13 +2804,13 @@ class PatchTableFixedN {
                                     if (!is_valid[i]) { break; }
                                 }
                             }
-                                                                
+
                             if (is_valid[i]) {
                                 nvalid++;
                                 if (nvalid >= p->kcoherence) { break; }
                             }
                         }
-                    
+
                         if (nvalid < p->kcoherence) {
                             knn *= 2;
                         } else {
@@ -2821,7 +2823,7 @@ class PatchTableFixedN {
                                 int ysrc = INT_TO_Y(v);
                                 matched_dists[i] = TABLE_LOOKUP_PATCH_DIST(xsrc, ysrc);
                             }
-                            
+
                             matched_triples.resize(matched_indices.size());
                             for (int i = 0; i < knn; i++) {
                                 matched_triples[i] = std::make_pair(matched_dists[i], std::make_pair(matched_indices[i], is_valid[i]));
@@ -2833,7 +2835,7 @@ class PatchTableFixedN {
                                 is_valid[i] = matched_triples[i].second.second;
                             }
 #endif
-                            
+
                             int current_valid = 0;
                             for (int i = 0; i < knn; i++) {
                                 int matched_index = matched_indices[i];
@@ -2865,7 +2867,7 @@ class PatchTableFixedN {
                         }
                     }
                     prev_knn = knn;
-                
+
                 TABLE_END_FOR_ALLOWED_PATCHES()
 
 #if TABLE_SAVE_KCOHERENCE
@@ -2883,7 +2885,7 @@ class PatchTableFixedN {
                 Array<double> kcoherence_nnf;
                 p->pm_knn = p->kcoherence;
                 p->pm_min_dist = p->kcoherence_min_dist;
-                
+
 #if TABLE_VERBOSE
                 printf("calling treecann\n"); fflush(stdout);
                 printf("allowed_patches=%p\n", allowed_patches.get()); fflush(stdout);
@@ -2893,7 +2895,7 @@ class PatchTableFixedN {
                 } else {
                     TreeCANN<real, 0, ndims, 1, itype>(p, b0, wh0, allowed_patches.get(), p->kcoherence).lookup(b0, wh0, kcoherence_nnf, allowed_patches.get());
                 }
-                
+
                 if (kcoherence_nnf.width() != kcoherence_set.width() || kcoherence_nnf.height() != kcoherence_set.height() || kcoherence_nnf.sizes[2] != p->kcoherence || kcoherence_set.sizes[2] != p->kcoherence) {
                     fprintf(stderr, "kcoherence_nnf sizes %s do not match kcoherence_set sizes %s\n", vector_to_str_int(kcoherence_nnf.sizes).c_str(),
                             vector_to_str_int(kcoherence_set.sizes).c_str());
@@ -2921,12 +2923,12 @@ class PatchTableFixedN {
                         }
                     }
                 }
-                
+
             } else if (p->kcoherence_algo == KCOHERENCE_ALGO_PM) {
                 Array<double> kcoherence_nnf;
                 p->pm_knn = p->kcoherence;
                 p->pm_min_dist = p->kcoherence_min_dist;
-                
+
 #if TABLE_VERBOSE
                 printf("calling patchmatch\n"); fflush(stdout);
                 printf("allowed_patches=%p\n", allowed_patches.get()); fflush(stdout);
@@ -2985,7 +2987,7 @@ class PatchTableFixedN {
                 printf("table kcoherence time: %f\n", wall_time()-T0_kcoherence);
             }
         }
-        
+
         /* ---------------------------------------------------------------------------------
            Compute k-means clusters
            --------------------------------------------------------------------------------- */
@@ -2993,19 +2995,19 @@ class PatchTableFixedN {
         Array<real> cluster_wh0;
 #if TABLE_CLUSTER_KMEANS
         const Array<real> &choose_wh0(p->cluster_kmeans ? cluster_wh0: wh0);
-        
+
         cv::Mat cluster_labels, cluster_centers;
-        
+
         if (p->cluster_kmeans) {
             double T0_cluster_kmeans = wall_time();
-            
+
             int point_count = 0;
             TABLE_FOR_ALLOWED_PATCHES() {
                 point_count++;
             } TABLE_END_FOR_ALLOWED_PATCHES();
 
             cv::Mat cluster_points(point_count, GRID_NCHANNELS, CV_32FC1);
-            
+
             int current_point = 0;
             TABLE_FOR_ALLOWED_PATCHES() {
                 float *row = cluster_points.ptr<float>(current_point);
@@ -3016,7 +3018,7 @@ class PatchTableFixedN {
                 current_point++;
             } TABLE_END_FOR_ALLOWED_PATCHES();
             ASSERT2(current_point == point_count, "expected current_point == point_count");
-            
+
             cv::TermCriteria criteria(cv::TermCriteria::EPS+cv::TermCriteria::COUNT, p->kmeans_max_iters, p->kmeans_eps);
             double T0_kmeans = wall_time();
             kmeans(cluster_points, p->cluster_count, cluster_labels, criteria, p->kmeans_attempts, cv::KMEANS_PP_CENTERS, cluster_centers);
@@ -3025,7 +3027,7 @@ class PatchTableFixedN {
             ASSERT2(cluster_labels.cols == 1, "expected labels.cols == 1");
             ASSERT2(cluster_centers.rows == p->cluster_count, "expected clusters.rows == cluster_count");
             ASSERT2(cluster_centers.cols == GRID_NCHANNELS, "expected centers.cols == GRID_NCHANNELS");
-            
+
             // Want gck_ymax() = gck_ymin() + 1
             //      (h - pw+1) = (pw-1) + 1
             //      h = 2*pw-1
@@ -3048,9 +3050,9 @@ class PatchTableFixedN {
 #endif
 
         /* ---------------------------------------------------------------------------------
-           Build table 
+           Build table
            --------------------------------------------------------------------------------- */
-        
+
         bool table_built = false;
 
 #if TABLE_PRODUCT_QUANTIZE
@@ -3058,9 +3060,9 @@ class PatchTableFixedN {
             /* Build product quantized table */
             table_built = true;
             set_nslices(choose_wh0);
-            
+
             product_quantizer = make_shared<ProductQuantizer<real, itype> >(p, wh0, nslices, allowed_patches.get());
-            
+
             /* Populate table with patches */
             table.resize(nslices);
             table.clear(TABLE_UNUSED);
@@ -3070,7 +3072,7 @@ class PatchTableFixedN {
                     if (!in_bounds(patch_index, table.nelems)) {
                         fprintf(stderr, "patch_index (%d) not in table bounds %d\n", patch_index, table.nelems); ASSERT2(false, "out of bounds");
                     }
-                    
+
                     int v = table.data[patch_index];
                     if (v == TABLE_UNUSED) {
                         table.data[patch_index] = XY_TO_INT(x, y);
@@ -3080,7 +3082,7 @@ class PatchTableFixedN {
                     }
                 } TABLE_END_FOR_ALLOWED_PATCHES();
             }
-            
+
             do_dt_product_quantize();
             check_table(table);
         }
@@ -3096,7 +3098,7 @@ class PatchTableFixedN {
 #endif
 
             set_nslices(choose_wh0);
-            
+
 #if TABLE_VERBOSE
             printf("PatchTableFixedN constructing partitions\n"); fflush(stdout);
 #endif
@@ -3107,10 +3109,10 @@ class PatchTableFixedN {
             if (p->verbose) {
                 printf("table part time: %f secs\n", T_end_part-T_begin_part); fflush(stdout);
             }
-            
+
             vector<int> orig_patch_index;
             orig_patch_index.resize(nslices.size());
-            
+
             if (p->verbose) {
                 for (int i = 0; i < (int) GRID_NCHANNELS; i++) {
                     printf("%d: [%f, %f], range=%f, nslices=%d\n", i, double(part->L[i]->min_val), double(part->L[i]->max_val), double(part->L[i]->max_val-part->L[i]->min_val), nslices[i]);
@@ -3146,7 +3148,7 @@ class PatchTableFixedN {
                         patch_order[patch_order_count++] = XY_TO_INT(x, y);
                     TABLE_END_FOR_ALLOWED_PATCHES();
                     std::random_shuffle(&patch_order[0], (&patch_order[0])+patch_order_count);
-                    
+
                     for (int i = 0; i < patch_order_count; i++) {
                         int pos = patch_order[i];
                         int x = INT_TO_X(pos), y = INT_TO_Y(pos);
@@ -3162,12 +3164,12 @@ class PatchTableFixedN {
                 lo.resize(GRID_NCHANNELS);
                 hi.resize(GRID_NCHANNELS);
                 grid_index.resize(GRID_NCHANNELS);
-                
+
 #if (TABLE_OPTIMIZE_DT && !TABLE_DT_REGULAR)
                 table_dist.resize(nslices);
 #endif
                 TABLE_FOR_ALLOWED_PATCHES_OPTIONAL_CLUSTER()
-                
+
                     part->get_patch_index(choose_wh0, x, y, orig_patch_index);
 #if TABLE_VERBOSE
                     if (x % 10 == 0 && y % 10 == 0) {
@@ -3192,7 +3194,7 @@ class PatchTableFixedN {
                             grid_index[i] = orig_patch_index[i];
                         }
                     }
-                    
+
                     /* Add patch to adjacent voxels */
                     if (p->populate_nearest) {
                         add_patch(x, y, orig_patch_index, p, unique);
@@ -3293,7 +3295,7 @@ class PatchTableFixedN {
                 }
                 do_after_dt();
             }
-            
+
     /*        if (TABLE_RANDOMIZE_LOOKUP) {
                 delete part;
                 part = new PatchPartition<real, itype>(p, wh0, nslices, true);
@@ -3309,15 +3311,15 @@ class PatchTableFixedN {
             build_ann_index();
         }
 #endif
-        
+
         if (p->lookup_algo == LOOKUP_ALGO_KDTREE) {
             build_flann_index();
         }
-        
+
         if (p->lookup_algo == LOOKUP_ALGO_TREECANN) {
             treecann = make_shared<TreeCANN<real, 1, ndims, 0, itype> >(p, b0, wh0, allowed_patches.get());
         }
-        
+
         if (p->verbose) {
             printf("table total precomputation time: %f secs\n", wall_time()-T0_construct_table);
             printf("\n");
@@ -3331,7 +3333,7 @@ class PatchTableFixedN {
         if (p->cluster_kmeans) {
             sub_allowed_patches.resize(bnn_height, bnn_width);
             sub_allowed_patches.clear(-1);
-            
+
             int label_count = 0;
             TABLE_FOR_ALLOWED_PATCHES() {
                 int lbl = cluster_labels.at<int>(label_count);
@@ -3365,13 +3367,13 @@ class PatchTableFixedN {
                 pcopy->limit = int(pcopy->limit*mul_factor);
                 pcopy->kcoherence = 0;
                 pcopy->ntables = 1;
-                
+
                 tables.push_back(make_shared<PatchTableFixedN<real, in_type, ndims, itype> >(pcopy, b, allowed_patches_));
             }
         }
 #endif
     }
-    
+
     ~PatchTableFixedN() {
         if (p->verbose) {
             printf("~PatchTableFixedN\n");
@@ -3399,7 +3401,7 @@ class PatchTableFixedN {
         int ann_w = TABLE_IMG_WIDTH(wh)-p->patch_w+1;
 
         if (p->is_descriptor) { calc_exact_dist = false; }
-        
+
         double T4 = wall_time();
         PATCH_DIST_CALC_BVEC0(wh0);
 #if TABLE_OPENMP
@@ -3410,7 +3412,7 @@ class PatchTableFixedN {
                 int xsrc = ann(y, x, NNF_X);
                 int ysrc = ann(y, x, NNF_Y);
                 CHECK_NNF_BOUNDS(x, y, xsrc, ysrc);
-                
+
                 PATCH_DIST_CALC_AVEC(wh);
 
                 real dsrc = 0;
@@ -3477,10 +3479,10 @@ class PatchTableFixedN {
         double T0_overall = wall_time();
         get_padded_descriptor(a0, lookup_buffer, lookup_wh, "  1-NN lookup");
         Array<real> &a_wh(lookup_wh);
-        
+
         const Array<in_type> &a(a0);
         const Array<in_type> &b(b0);
-        
+
 //        int a_w = a0.width(), a_h = a0.height();
 //        int b_w = b0.width(), b_h = b0.height();
 
@@ -3493,14 +3495,14 @@ class PatchTableFixedN {
 //        int b0_eh = b0.height()-p->patch_w+1;
         int b0_ew = TABLE_IMG_WIDTH(wh0)-p->patch_w+1;
         int b0_eh = TABLE_IMG_HEIGHT(wh0)-p->patch_w+1;
-    
+
         int a_w = ann_w+p->patch_w-1, a_h = ann_h+p->patch_w-1;
         int b_w = b0_ew+p->patch_w-1, b_h = b0_eh+p->patch_w-1;
 
         ann.resize(ann_h, ann_w, 3);
 
         PATCH_DIST_CALC_BVEC0(wh0);
-        
+
 #if TABLE_SAVE_KCOHERENCE
         Array<float> array_kcoherence_improved;
         if (p->save_kcoherence) {
@@ -3508,13 +3510,13 @@ class PatchTableFixedN {
             array_kcoherence_improved.clear();
         }
 #endif
-        
+
 #if TABLE_PROFILE
         double T_lookup = 0.0;
         double T_kcoherence = 0.0;
         double T_rs = 0.0;
         double T_prop = 0.0;
-        
+
         double T0_init_inf = wall_time();
 #endif
 #if TABLE_VERBOSE
@@ -3525,12 +3527,12 @@ class PatchTableFixedN {
                 double *ann_row = &ann(y, 0, 0);
                 for (int x = 0; x < ann_w; x++) {
                     double *ann_p = &ann_row[x*3];
-                    
+
                     TABLE_PRECALC_A_PATCH();
                     int xsrc = rand()%b0_ew;
                     int ysrc = rand()%b0_eh;
                     real dcurrent = TABLE_LOOKUP_PATCH_DIST(xsrc, ysrc);
-                    
+
                     ann_p[NNF_X] = xsrc;
                     ann_p[NNF_Y] = ysrc;
                     ann_p[NNF_DIST] = dcurrent;
@@ -3559,15 +3561,15 @@ class PatchTableFixedN {
                     double *ann_prev_row = &(*ann_prev)(y, 0, 0);
                     for (int x = 0; x < ann_w; x++) {
                         TABLE_COPY_PREV_NNF();
-                        
+
                         TABLE_PRECALC_A_PATCH();
                         real dcurrent = TABLE_LOOKUP_PATCH_DIST(xsrc, ysrc);
-                        
+
                         double temporal_scale_current = temporal_scale;
                         if (coherence_temporal_sv) {
                             temporal_scale_current = (*coherence_temporal_sv)(y, x);
                         }
-                        
+
                         ann_p[NNF_DIST] = lookup_dist_orig(y, x) = dcurrent * temporal_scale_current;
                     }
                 }
@@ -3577,7 +3579,7 @@ class PatchTableFixedN {
                     double *ann_prev_row = &(*ann_prev)(y, 0, 0);
                     for (int x = 0; x < ann_w; x++) {
                         TABLE_COPY_PREV_NNF();
-                        
+
                         ann_p[NNF_DIST] = ann_prev_p[NNF_DIST] * temporal_scale;
                     }
                 }
@@ -3592,9 +3594,9 @@ class PatchTableFixedN {
         const int dy_table[8] = {-1, -1, -1,
                                   0,      0,
                                   1,  1,  1 };
-        
+
         bool do_rs_or_spatial = p->do_rs || p->spatial;
-        
+
         int prop_w = (p->query_step+p->prop_dist)*2+1;
         int sat_w = TABLE_PATCH_W+prop_w+1-1;
         int sat_w_nopad = sat_w-1;
@@ -3608,18 +3610,18 @@ class PatchTableFixedN {
         for (int prop_iter = 0; prop_iter < p->prop_iters; prop_iter++) {
             bool reverse = prop_iter % 2;
             bool do_lookup = prop_iter == 0 && p->do_table_lookup;
-            
+
             bool do_kcoherence = p->kcoherence > 0 && (p->kcoherence_iter < 0 || p->kcoherence_iter == prop_iter);
 #if TABLE_VERBOSE
             printf("lookup_templated iter %d/%d, reverse=%d, do_kcoherence=%d\n", prop_iter, p->prop_iters, int(reverse), int(do_kcoherence)); fflush(stdout);
 #endif
-            
+
 #if TABLE_OPENMP
             #pragma omp parallel for schedule(dynamic, 16)
 #endif
             for (int y0 = 0; y0 < ann_h; y0 += p->query_step) {
                 int y = reverse ? (ann_h-1-y0): y0;
-                
+
                 vector<real> sat(sat_w*sat_w, 0);           /* Sat table is indexed by sat[(dy+1)*sat_w+dx+1] so we can store zeros in early rows/cols. */
 
                 real *wh_row = wh_offset + y * a_wh.stride[0];
@@ -3631,11 +3633,11 @@ class PatchTableFixedN {
 #endif
 
                     TABLE_PRECALC_A_PATCH();
-                    
+
                     int xbest = ann(y, x, NNF_X);
                     int ybest = ann(y, x, NNF_Y);
                     real dbest = ann(y, x, NNF_DIST) * prop_scale;
-                    
+
                     /* Table lookup */
 
                     if (do_lookup) {
@@ -3650,7 +3652,7 @@ class PatchTableFixedN {
                         if (p->product_quantize) {
                             int patch_idx = product_quantizer->quantize(wh_p);
 //                            ASSERT2(in_bounds(patch_idx, table.nelems), "expected quantized patch in table bounds");
-                            
+
                             int v = table.data[patch_idx];
 
                             int xsrc = INT_TO_X(v)-pw1;
@@ -3668,7 +3670,7 @@ class PatchTableFixedN {
                         } else {
 #endif
                             int patch_idx = 0;
-                            
+
                             for (int i = 0; i < GRID_NCHANNELS; i++) {      /* TODO: Could speed up by templating over grid channels */
                                 patch_idx += part->L[i]->get_bin(wh_p[i]) * table.stride[i];
                             }
@@ -3678,10 +3680,10 @@ class PatchTableFixedN {
                             if (p->cluster_kmeans) {
                                 int v_sub = table.data[patch_idx] - sub_upper_left;
                                 ASSERT2(in_bounds(v_sub, sub_tables.size()), "expected v_sub in bounds sub_tables.size()");
-                                
+
                                 PatchTableFixedN<real, in_type, ndims, itype> *sub_table = sub_tables[v_sub].get();
                                 PatchPartition<real, itype> *sub_part = sub_table->part;
-                                
+
                                 int sub_patch_idx = 0;
                                 for (int i = 0; i < GRID_NCHANNELS; i++) {
                                     sub_patch_idx += sub_part->L[i]->get_bin(wh_p[i]) * sub_table->table.stride[i];
@@ -3707,22 +3709,22 @@ class PatchTableFixedN {
                                     CHECK_NNF_BOUNDS(x, y, xbest, ybest);
                                 }
                             }
-                            
+
 #if TABLE_MULTI_TABLES
                             int xprev = xsrc, yprev = ysrc;
                             for (int itable = 0; itable < (int) tables.size(); itable++) {
                                 auto current_table = tables[itable].get();
-                                
+
                                 patch_idx = 0;
                                 for (int i = 0; i < GRID_NCHANNELS; i++) {      /* TODO: Could speed up by templating over grid channels */
                                     patch_idx += current_table->part->L[i]->get_bin(wh_p[i]) * current_table->table.stride[i];
                                 }
-                                
+
                                 v = current_table->table.data[patch_idx];
-                                
+
                                 int xsrc1 = INT_TO_X(v)-pw1;
                                 int ysrc1 = INT_TO_Y(v)-pw1;
-                                
+
                                 if ((xsrc1 != xbest || ysrc1 != ybest) && (xsrc1 != xprev || ysrc1 != yprev)) {
                                     real dcurrent = TABLE_LOOKUP_PATCH_DIST(xsrc1, ysrc1);
                                     if (dcurrent < dbest) {
@@ -3739,14 +3741,14 @@ class PatchTableFixedN {
 #if TABLE_PRODUCT_QUANTIZE
                         }
 #endif
-                        
+
 #if TABLE_PROFILE
                         T_lookup += wall_time() - T0_lookup;
 #endif
                     }
-                    
+
                     /* k-coherence */
-                    
+
                     if (do_kcoherence) {
 #if TABLE_VERBOSE
                         printf("lookup_templated, k-coherence, xbest=%d, ybest=%d, kcoherence_set, width=%d, height=%d, kcoherence_step=%d\n", xbest, ybest, kcoherence_set.width(), kcoherence_set.height(), p->kcoherence_step); fflush(stdout);
@@ -3762,7 +3764,7 @@ class PatchTableFixedN {
                             fprintf(stderr, "kcoherence accessed disallowed patch %d, %d (xbest=%d, ybest=%d, kcoherence_step=%d)\n", xbest/p->kcoherence_step, ybest/p->kcoherence_step, p->kcoherence_step); ASSERT2(false, "kcoherence access disallowed patch");
                         }
 #endif
-                        
+
                         int kcoherence_dx = 0, kcoherence_dy = 0;
                         if (p->kcoherence_step > 1) {
                             kcoherence_dx = xbest%p->kcoherence_step;
@@ -3805,12 +3807,12 @@ class PatchTableFixedN {
                                 }
 #endif
 
-                                
+
                                 dbest = dcurrent;
                                 xbest = xsrc;
                                 ybest = ysrc;
                             }
-                            
+
 #if TABLE_KCOHERENCE_ENRICH
                             if (p->kcoherence_enrich) {
                                 kcoherence_type *kcoherence_ptr2 = kcoherence_set.data + kcoherence_set.stride[0]*(ysrc/p->kcoherence_step) + kcoherence_set.stride[1]*(xsrc/p->kcoherence_step);
@@ -3833,7 +3835,7 @@ class PatchTableFixedN {
 
                                     if (xsrc2 != xbest || ysrc2 != ybest) {
                                         real dcurrent2 = TABLE_LOOKUP_PATCH_DIST(xsrc2, ysrc2);
-                                        
+
                                         if (dcurrent2 < dbest) {
                                             dbest = dcurrent2;
                                             xbest = xsrc2;
@@ -3849,7 +3851,7 @@ class PatchTableFixedN {
                         T_kcoherence += wall_time() - T0_kcoherence;
 #endif
                     }
-                    
+
                     /* Spatial search or random search */
                     if (do_rs_or_spatial) {
 #if TABLE_VERBOSE
@@ -3868,12 +3870,12 @@ class PatchTableFixedN {
                             else if (spatial_ymax > b0_eh) { spatial_ymax = b0_eh; }
                             if (spatial_xmin < 0) { spatial_xmin = 0; }
                             else if (spatial_xmax > b0_ew) { spatial_xmax = b0_ew; }
-                            
+
                             for (int ysrc = spatial_ymin; ysrc < spatial_ymax; ysrc++) {
                                 for (int xsrc = spatial_xmin; xsrc < spatial_xmax; xsrc++) {
                                     if ((xsrc != xbest0 || ysrc != ybest0) && (!use_allowed_patches || (*allowed_patches)(ysrc, xsrc) == p->allowed_index)) {
                                         real dcurrent = TABLE_LOOKUP_PATCH_DIST(xsrc, ysrc);
-                                        
+
                                         if (dcurrent < dbest) {
                                             dbest = dcurrent;
                                             xbest = xsrc;
@@ -3887,10 +3889,10 @@ class PatchTableFixedN {
                             int r = rand()&7;
                             int xsrc = xbest+dx_table[r];
                             int ysrc = ybest+dy_table[r];
-                            
+
                             if (in_bounds(xsrc, b0_ew) && in_bounds(ysrc, b0_eh) && (!use_allowed_patches || (*allowed_patches)(ysrc, xsrc) == p->allowed_index)) {
                                 real dcurrent = TABLE_LOOKUP_PATCH_DIST(xsrc, ysrc);
-                                
+
                                 if (dcurrent < dbest) {
                                     dbest = dcurrent;
                                     xbest = xsrc;
@@ -3903,7 +3905,7 @@ class PatchTableFixedN {
                         T_rs += wall_time() - T0_rs;
 #endif
                     }
-                
+
                     /* Propagate */
                     if (p->do_prop) {
 #if TABLE_VERBOSE
@@ -3920,7 +3922,7 @@ class PatchTableFixedN {
                         real *a_base = a.data + ay_shift*a.stride[0] + ax_shift*a.stride[1];
                         real *b_base = b.data + by_shift*b.stride[0] + bx_shift*b.stride[1];
                         double *ann_base = ann.data + ay_shift*ann.stride[0] + ax_shift*ann.stride[1];
-                        
+
                         int dy_min = 0, dy_max = sat_w_nopad;
                         int dx_min = 0, dx_max = sat_w_nopad;
 
@@ -3928,7 +3930,7 @@ class PatchTableFixedN {
                         else if (ax_shift + dx_max > a_w) { dx_max = a_w-ax_shift; }
                         if (ay_shift + dy_min < 0) { dy_min = -ay_shift; }
                         else if (ay_shift + dy_max > a_h) { dy_max = a_h-ay_shift; }
-                        
+
                         if (bx_shift + dx_min < 0) { dx_min = -bx_shift; }
                         else if (bx_shift + dx_max > b_w) { dx_max = b_w-bx_shift; }
                         if (by_shift + dy_min < 0) { dy_min = -by_shift; }
@@ -3961,7 +3963,7 @@ class PatchTableFixedN {
 #if TABLE_VERBOSE
                             printf("lookup_templated, not is_descriptor, propagating, compute sat\n"); fflush(stdout);
 #endif
-                            
+
                             /* Compute summed area table */
                             for (int dy = dy_min; dy < dy_max; dy++) {
                                 real *a_row = a_base + dy*a.stride[0];
@@ -3969,27 +3971,27 @@ class PatchTableFixedN {
                                 real *sat_row = &sat[(dy+1)*sat_w+1];
                                 real *sat_row_prev = &sat[dy*sat_w+1];
                                 real row_sum = 0;
-                                
+
                                 for (int dx = dx_min; dx < dx_max; dx++) {            /* TODO: Could probably unroll this via a template for speed */
                                     ASSERT(in_bounds(ax_shift+dx, a_w), "expected ax_shift+dx in bounds a_w");
                                     ASSERT(in_bounds(ay_shift+dy, a_h), "expected ay_shift+dy in bounds a_h");
                                     ASSERT(in_bounds(bx_shift+dx, b_w), "expected bx_shift+dx in bounds b_w");
                                     ASSERT(in_bounds(by_shift+dy, b_h), "expected by_shift+dy in bounds b_h");
-                                    
+
                                     real *a_pixel = a_row + dx*a.stride[1];
                                     real *b_pixel = b_row + dx*b.stride[1];
-                                    
+
                                     real delta_0 = a_pixel[0]-b_pixel[0];
                                     real delta_1 = a_pixel[1]-b_pixel[1];
                                     real delta_2 = a_pixel[2]-b_pixel[2];
-                                    
+
                                     row_sum += delta_0*delta_0 + delta_1*delta_1 + delta_2*delta_2;
                                     sat_row[dx] = row_sum + sat_row_prev[dx];
                                 }
                             }
                         }
 #endif
-                        
+
 #if TABLE_VERBOSE
                         printf("lookup_templated, propagating, result from sat\n"); fflush(stdout);
 #endif
@@ -4001,7 +4003,7 @@ class PatchTableFixedN {
     /*                    if (x == 1324 && y == 0) {
                             printf("at %d, %d, dx_min=%d, dx_max=%d, dy_min=%d, dy_max=%d, xbest=%d, ybest=%d, dbest=%f, dx_max_patch=%d, dy_max_patch=%d\n", x, y, dx_min, dx_max, dy_min, dy_max, xbest, ybest, dbest, dx_max_patch, dy_max_patch);
                         } */
-                        
+
                         bool missing = false;
                         for (int dy = dy_min; dy < dy_max_patch; dy++) {
     //                    for (int dy = dy_max_patch - 1; dy >= dy_min; dy--) {
@@ -4171,8 +4173,8 @@ class PatchTableFixedN {
                     */
                 }
             }
-            
-            
+
+
         }
 
         if (ann_prev && p->coherence_temporal != 0.0) {
@@ -4191,7 +4193,7 @@ class PatchTableFixedN {
                 }
             }
         }
-        
+
 #if TABLE_SAVE_KCOHERENCE
         if (p->save_kcoherence) {
             save_color_image<float>(array_kcoherence_improved, "kcoherence_improved.pfm");
@@ -4215,7 +4217,7 @@ class PatchTableFixedN {
 
         return ans;
     }
-    
+
     double lookup(const Array<in_type> &a0, Array<double> &ann, Array<double> *ann_prev=NULL, Array<float> *coherence_temporal_sv=NULL) {
 #if TABLE_VERBOSE
         printf("lookup\n"); fflush(stdout);
@@ -4226,7 +4228,7 @@ class PatchTableFixedN {
             treecann->lookup(a0, lookup_wh, ann);
             return wall_time() - T0;
         }
-        
+
         if (p->is_descriptor) {
             if (allowed_patches) {
                 return lookup_templated<1, 1>(a0, ann, ann_prev, coherence_temporal_sv);
@@ -4299,7 +4301,7 @@ class PatchTableFixedN {
 		float *previous_intersection = new float[maxdim + 1];
 		float *distance = new float[maxdim];
 		int * index_array = new int[maxdim];
-        
+
 		vector<int> outer_stride(table_dist.sizes.size());
 		for (int inner_dim = 0; inner_dim < table_dist.sizes.size(); inner_dim++) {		// Dimension to be transformed along
 			int product = 1;		// Product of all the rest of the dimensions (that are not the inner dimension)
@@ -4393,7 +4395,7 @@ class PatchTable { public:
     DECLARE_PTR(25)
     DECLARE_PTR(30)
     DECLARE_PTR(40)
-    
+
     PatchTable(PatchTableParams *p, const Array<in_type> &a, Array<itype> *allowed_patches=NULL) {
         if (p->is_descriptor) {
             p->ndims = a.channels();
@@ -4401,7 +4403,7 @@ class PatchTable { public:
         }
         gck_nchroma = p->nchroma;
         gck_dims = p->ndims;
-        
+
         if (0) { }
         DECLARE_CONSTRUCTOR(3)
         DECLARE_CONSTRUCTOR(4)
@@ -4422,7 +4424,7 @@ class PatchTable { public:
         DECLARE_CONSTRUCTOR(40)
         else { fprintf(stderr, "unsupported number of dimensions\n"); ASSERT2(false, "invalid dims"); }
     }
-    
+
     ~PatchTable() {
         if (0) { }
         DECLARE_DESTRUCTOR(3)
@@ -4466,7 +4468,7 @@ class PatchTable { public:
         DECLARE_LOOKUP(40)
         else { fprintf(stderr, "unsupported number of dimensions\n"); ASSERT2(false, "invalid dims"); }
     }
-    
+
     void save(string filename) {
         if (0) { }
         DECLARE_SAVE(3)
@@ -4491,4 +4493,3 @@ class PatchTable { public:
 };
 
 #endif
-

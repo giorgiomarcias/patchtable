@@ -146,7 +146,7 @@ void PatchTableParams::set_speed(int i) {
     else if (i == 7) { set_from_switches(string("-ndims 7 -nchroma 1 -limit 1.000000 -do_rs 1 -run_dt 1 -partition_step 1 -dt_iters -1 -do_prop 1 -query_step 4 -kcoherence 3 -kcoherence_iter 0 -prop_iters 1 -spatial 1")); }
     else if (i == 8) { set_from_switches(string("-ndims 6 -nchroma 1 -limit 100.000000 -do_rs 1 -run_dt 1 -partition_step 1 -dt_iters -1 -do_prop 1 -query_step 6 -kcoherence 5 -kcoherence_iter 0 -prop_iters 1 -spatial 0")); }
     else if (i == 9) { set_from_switches(string("-ndims 6 -nchroma 1 -limit 100.000000 -do_rs 0 -run_dt 1 -partition_step 1 -dt_iters -1 -do_prop 1 -query_step 10 -kcoherence 5 -kcoherence_iter 0 -prop_iters 1 -spatial 0")); }
-    else { fprintf(stderr, "Error: set_speed(i), i=%d, expected integer in 0...9\n"); exit(1); }
+    else { fprintf(stderr, "Error: set_speed(i), i=%d, expected integer in 0...9\n", i); exit(1); }
 }
 
 void PatchTableParams::set_from_switches(string s) {
@@ -506,7 +506,7 @@ void load(FILE *f, dtype &v) { \
 } \
 \
 void save(FILE *f, const vector<dtype> &v) { \
-    if (TABLE_DEBUG_SERIALIZE) { printf("save(vector): saving %d elements each of size %d\n", v.size(), sizeof(dtype)); } \
+    if (TABLE_DEBUG_SERIALIZE) { printf("save(vector): saving %lu elements each of size %lu\n", v.size(), sizeof(dtype)); } \
     save(f, int(v.size())); \
     ASSERT2(fwrite((void *) &v[0], sizeof(dtype), v.size(), f) == v.size(), "save(vector): expected to write n elements"); \
 } \
@@ -515,13 +515,13 @@ void load(FILE *f, vector<dtype> &v) { \
     int size; \
     load(f, size); \
     v.resize(size); \
-    if (TABLE_DEBUG_SERIALIZE) { printf("load(vector): loading %d elements each of size %d\n", v.size(), sizeof(dtype)); } \
+    if (TABLE_DEBUG_SERIALIZE) { printf("load(vector): loading %lu elements each of size %lu\n", v.size(), sizeof(dtype)); } \
     ASSERT2(fread((void *) &v[0], sizeof(dtype), size, f) == size, "load(vector): expected to read n elements"); \
 } \
 \
 void save(FILE *f, const Array<dtype> &v) { \
     save(f, v.sizes); \
-    if (TABLE_DEBUG_SERIALIZE) { printf("save(Array): saving %d elements each of size %d\n", v.nelems, sizeof(dtype)); } \
+    if (TABLE_DEBUG_SERIALIZE) { printf("save(Array): saving %d elements each of size %lu\n", v.nelems, sizeof(dtype)); } \
     ASSERT2(fwrite((void *) &v.data[0], sizeof(dtype), v.nelems, f) == v.nelems, "save(Array): expected to write nelems elements"); \
 } \
 \
@@ -529,7 +529,7 @@ void load(FILE *f, Array<dtype> &v) { \
     vector<int> sizes; \
     load(f, sizes); \
     v.resize(sizes); \
-    if (TABLE_DEBUG_SERIALIZE) { printf("load(Array): loading %d elements each of size %d\n", v.nelems, sizeof(dtype)); } \
+    if (TABLE_DEBUG_SERIALIZE) { printf("load(Array): loading %d elements each of size %lu\n", v.nelems, sizeof(dtype)); } \
     ASSERT2(fread((void *) &v.data[0], sizeof(dtype), v.nelems, f) == v.nelems, "load(Array): expected to read nelems elements"); \
 }
 
@@ -572,7 +572,7 @@ void load_id(FILE *f, const string &s) {
     }
 }
 
-AdjacencySet::AdjacencySet(int n, bool unique_) :sets(unique_ ? 0: n, NULL), setsL(n, NULL), unique(unique_) {
+AdjacencySet::AdjacencySet(int n, bool unique_) : unique(unique_), sets(unique_ ? 0: n, NULL), setsL(n, NULL) {
 }
 
 AdjacencySet::~AdjacencySet() {

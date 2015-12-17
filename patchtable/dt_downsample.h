@@ -2442,7 +2442,7 @@ void dt_downsample(const Array<itype> &hi_table, Array<itype> &lo_table) {
     }
         
 
-    else { fprintf(stderr, "dimension unsupported in dt_downsample: %d\n", hi_table.sizes.size()); ASSERT2(false, "dim unsupported"); }
+    else { fprintf(stderr, "dimension unsupported in dt_downsample: %luu\n", hi_table.sizes.size()); ASSERT2(false, "dim unsupported"); }
 }
     
 
@@ -4859,7 +4859,7 @@ void dt_upsample(const Array<itype> &lo_table, Array<itype> &hi_table) {
     }
     
 
-    else { fprintf(stderr, "dimension unsupported in dt_upsample: %d\n", hi_table.sizes.size()); ASSERT2(false, "dim unsupported"); }
+    else { fprintf(stderr, "dimension unsupported in dt_upsample: %lu\n", hi_table.sizes.size()); ASSERT2(false, "dim unsupported"); }
 }
     
 

@@ -413,7 +413,7 @@
                 
             }
             
-            else { fprintf(stderr, "copy_rect/clear_rect dimension unsupported: %d\n", sizes.size()); exit(1); }
+            else { fprintf(stderr, "copy_rect/clear_rect dimension unsupported: %luu\n", sizes.size()); exit(1); }
         }
         
     void clear_rect(const vector<int> &src_start, const vector<int> &extent, real value=0) {

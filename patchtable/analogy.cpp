@@ -416,6 +416,7 @@ void vote(PatchTableParams *p, AnalogyParams *a_params, Array<float> &b, const A
 
 //                                b(by+dy, bx+dx, c) += a(ay+dy, ax+dx, c); \
 //                            weights(by+dy, bx+dx, 0) += 1; \
+//
 
                     VOTE_OVERLAPPING(1);
                 } else {
@@ -675,16 +676,16 @@ class NNFOpticalFlowCorrector { public:
         
         if (a_params.analogy_verbose) { printf("coherence_temporal_sv sizes: %s\n", vector_to_str_int(coherence_temporal_sv.sizes).c_str()); fflush(stdout); }
 
-        double b_to_a_xscale = 1.0*a_w/b_w;
-        double b_to_a_yscale = 1.0*a_h/b_h;
+//        double b_to_a_xscale = 1.0*a_w/b_w;
+//        double b_to_a_yscale = 1.0*a_h/b_h;
         
         double pw2 = ANALOGY_DEFAULT_PATCH_W / 2.0;
         bool is_downsample = a_params.of_downsample != 1.0;
         
         int flow_w = flow_mat.cols, flow_h = flow_mat.rows;
         
-        double a_lo_to_hi_xscale = 1.0 * (a_w - 1) / (a_lo_w - 1);
-        double a_lo_to_hi_yscale = 1.0 * (a_h - 1) / (a_lo_h - 1);
+//        double a_lo_to_hi_xscale = 1.0 * (a_w - 1) / (a_lo_w - 1);
+//        double a_lo_to_hi_yscale = 1.0 * (a_h - 1) / (a_lo_h - 1);
         
         double b_lo_to_hi_xscale = 1.0 * (b_w - 1) / (b_lo_w - 1);
         double b_lo_to_hi_yscale = 1.0 * (b_h - 1) / (b_lo_h - 1);

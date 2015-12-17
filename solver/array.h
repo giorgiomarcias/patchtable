@@ -426,7 +426,7 @@ class Array {
         for (int c = 0; c < channels; c++) {
             for (int y = 0; y < height; y++) {
                 for (int x = 0; x < width; x++) {
-                    float val;
+                    float val = .0f;
 
                     if (dim == 1) {
                         val = (*this)(y);
@@ -1170,7 +1170,9 @@ class Array {
 //            data[i] = (data[i] <= 0.04045) ? data[i]/12.92 : pow(((data[i]+0.055)/1.055),2.4);
             data[i] = (data[i] <= 0.04045) ? data[i]/12.92 : pow_table(((data[i]+0.055)/1.055));
         }
+#if DEBUG_TIME
     	double Tmid = wall_time();
+#endif
         
         #pragma omp parallel for
 	    for (int y = 0; y < height() ; y+= downsample_dim0){
@@ -2185,7 +2187,7 @@ void free_gaussian_pyramid(const vector<Array *> &pyr) {
 template<class Array, class real, class atom, int channels>
 void upsample_gaussian_pyramid(const Array &input, Array &output, double mul_existing=0.0, double mul_new=1.0) {
     GAUSSIAN_PYRAMID_COEFFS();
-    for (int i = 0; i < 5; i++) { coeff[i] *= 2; }
+    for (int i = 0; i < Kw; i++) { coeff[i] *= 2; }
     
 #define UPDATE_VBLUR_EVEN(dx) \
 for (int c = 0; c < channels; c++) { \
@@ -2198,7 +2200,7 @@ for (int c = 0; c < channels; c++) { \
 }
 
 #define UPDATE_VBLUR_ALL() \
-            if (y & 1 == 0) { \
+            if ((y & 1) == 0) { \
                 for (int dx = -1; dx <= 1; dx++) { \
                     UPDATE_VBLUR_EVEN(dx); \
                 } \
@@ -2212,7 +2214,7 @@ for (int c = 0; c < channels; c++) { \
         for (int x = 0; x < output.width(); x += 2) { \
             int x2 = x/2; \
 \
-            if (y & 1 == 0) {         \
+            if ((y & 1) == 0) {         \
                 UPDATE_VBLUR_EVEN(1); \
             } else {                  \
                 UPDATE_VBLUR_ODD(1);  \
@@ -2663,7 +2665,7 @@ void box_blur(const ArrayT &input, ArrayT &output, int n) {
 
 // Inner loop originally:
 //                        output.get_nearest(y, x+dx, c) = output.get_nearest(y-1, x+dx, c) + (temp.get_clamp(y+n2, x+dx, c) - temp.get_clamp(y-n2-1, x+dx, c))*scale; \
-
+//
 
     double scale = 1.0/(n*n);
     #pragma omp parallel for
@@ -2899,6 +2901,9 @@ void euclidean_dist(const ArrayT &input, Array<int> &output) {
     for (int y = 0; y < output.height(); y++) {
         for (int x = 0; x < output.width(); x++) {
             EUCLIDEAN_DIST_READ();
+            // silence the "unused variable'dist'" warning:
+            if (dist >= 0)
+                ;
 
             EUCLIDEAN_DIST_WRITE_COORD(x+xp, y+yp);
             EUCLIDEAN_DIST_WRITE_COORD(x-xp, y+yp);
@@ -3213,7 +3218,7 @@ void gaussian_blur(Array<T, T_vec> &in, double sigma) {
 }
 
 #if __GNUC__
-typedef float array_float4 __attribute__ ((vector_size (16)));
+typedef float array_float4 __attribute__ ((ext_vector_type (16)));
 #endif
 
 #if ARRAY_USE_OPENCV
